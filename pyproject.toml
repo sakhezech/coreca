@@ -1,6 +1,6 @@
 [project]
-name = 'core'
-description = 'SSG'
+name = 'coreca'
+description = 'BYO Everything Static Site Generator'
 readme = 'README.md'
 license = 'MIT'
 dependencies = ['watchdog']
@@ -21,7 +21,7 @@ check = ['ruff check .', 'ruff format --check .']
 format = ['ruff check --fix .', 'ruff format .']
 
 [tool.hatch.version]
-path = 'src/core/__version__.py'
+path = 'src/coreca/__version__.py'
 
 [build-system]
 requires = ['hatchling']
