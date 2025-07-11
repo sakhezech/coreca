@@ -4,11 +4,20 @@ import threading
 import time
 from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
+from typing import Literal
 
 import watchdog.events
 import watchdog.observers
 
-type Signal = tuple[str, Path]
+
+class Signal:
+    def __init__(
+        self, source: str, type_: Literal['update', 'delete'], path: Path
+    ) -> None:
+        self.source = source
+        # NOTE: without specifying the type again self.type becomes str
+        self.type: Literal['update', 'delete'] = type_
+        self.path = path
 
 
 class EventToCoreHandler(watchdog.events.FileSystemEventHandler):
@@ -63,10 +72,12 @@ class Core[T]:
             if stop:
                 return
 
-    def receive_event(self, path: Path, event_type: str) -> None:
+    def receive_event(
+        self, path: Path, event_type: Literal['update', 'delete']
+    ) -> None:
         for proc in self.processors:
             if proc.match(path, self.base_path):
-                self.send_signal((f'{proc.name}:{event_type}', path))
+                self.send_signal(Signal(proc.name, event_type, path))
 
     def send_events_for_existing_files(self) -> None:
         for base, _, files in self.base_path.walk():
