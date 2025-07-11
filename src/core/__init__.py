@@ -4,7 +4,6 @@ import threading
 import time
 from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
-from typing import Self
 
 import watchdog.events
 import watchdog.observers
@@ -87,9 +86,9 @@ class Core[T]:
         self._observer.stop()
         self._observer.join()
 
-    def start_serve(self) -> None:
+    def start_serve(self, host_port: tuple[str, int]) -> None:
         self._httpd = http.server.ThreadingHTTPServer(
-            ('0.0.0.0', 5000),
+            host_port,
             functools.partial(
                 http.server.SimpleHTTPRequestHandler, directory=self.serve_path
             ),
@@ -101,21 +100,14 @@ class Core[T]:
         self._httpd.shutdown()
         self._httpd_thread.join()
 
-    def __enter__(self) -> Self:
+    def run(self, host_port: tuple[str, int] | None = None) -> None:
+        self.send_events_for_existing_files()
         self.start_observe()
-        self.start_serve()
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        _ = exc_type, exc_value, traceback
+        self.start_serve(host_port or ('localhost', 5000))
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print('Exiting')
         self.stop_observe()
         self.stop_serve()
-
-    def run(self) -> None:
-        self.send_events_for_existing_files()
-        with self:
-            try:
-                while True:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                print('Exiting')
