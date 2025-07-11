@@ -31,16 +31,10 @@ class EventToCoreHandler(watchdog.events.FileSystemEventHandler):
             pass
 
 
-class Processor[T]:
-    def __init__(
-        self,
-        name: str,
-        patterns: Collection[Path],
-        on_signal: Callable[['Core[T]', Signal], None],
-    ) -> None:
+class Processor:
+    def __init__(self, name: str, patterns: Collection[Path]) -> None:
         self.name = name
         self.patterns = patterns
-        self.on_signal = on_signal
 
     def match(self, path: Path, base: Path = Path('.')) -> bool:
         return any(
@@ -51,19 +45,23 @@ class Processor[T]:
 class Core[T]:
     def __init__(
         self,
-        processors: Sequence[Processor[T]],
+        processors: Sequence[Processor],
+        signal_handlers: Sequence[Callable[['Core[T]', Signal], bool | None]],
         state: T,
         base_path: Path | None = None,
         serve_path: Path | None = None,
     ) -> None:
         self.processors = processors
+        self.signal_handlers = signal_handlers
         self.state = state
         self.base_path = base_path or Path('.')
         self.serve_path = serve_path or Path('.')
 
     def send_signal(self, signal: Signal) -> None:
-        for proc in self.processors:
-            proc.on_signal(self, signal)
+        for handler in self.signal_handlers:
+            stop = handler(self, signal)
+            if stop:
+                return
 
     def receive_event(self, path: Path, event_type: str) -> None:
         for proc in self.processors:
