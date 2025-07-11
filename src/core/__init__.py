@@ -43,14 +43,24 @@ class Processor[T]:
         self.patterns = patterns
         self.on_signal = on_signal
 
-    def match(self, path: Path) -> bool:
-        return any(path.full_match(pattern) for pattern in self.patterns)
+    def match(self, path: Path, base: Path = Path('.')) -> bool:
+        return any(
+            path.full_match(base / pattern) for pattern in self.patterns
+        )
 
 
 class Core[T]:
-    def __init__(self, processors: Sequence[Processor[T]], state: T) -> None:
+    def __init__(
+        self,
+        processors: Sequence[Processor[T]],
+        state: T,
+        base_path: Path | None = None,
+        serve_path: Path | None = None,
+    ) -> None:
         self.processors = processors
         self.state = state
+        self.base_path = base_path or Path('.')
+        self.serve_path = serve_path or Path('.')
 
     def send_signal(self, signal: Signal) -> None:
         for proc in self.processors:
@@ -58,17 +68,19 @@ class Core[T]:
 
     def receive_event(self, path: Path, event_type: str) -> None:
         for proc in self.processors:
-            if proc.match(path):
+            if proc.match(path, self.base_path):
                 self.send_signal((f'{proc.name}:{event_type}', path))
 
     def send_events_for_existing_files(self) -> None:
-        for base, _, files in Path('.').walk():
+        for base, _, files in self.base_path.walk():
             for file in files:
                 self.receive_event(base / file, 'update')
 
     def start_observe(self) -> None:
         self._observer = watchdog.observers.Observer()
-        self._observer.schedule(EventToCoreHandler(self), '.', recursive=True)
+        self._observer.schedule(
+            EventToCoreHandler(self), str(self.base_path), recursive=True
+        )
         self._observer.start()
 
     def stop_observe(self) -> None:
@@ -79,7 +91,7 @@ class Core[T]:
         self._httpd = http.server.ThreadingHTTPServer(
             ('0.0.0.0', 5000),
             functools.partial(
-                http.server.SimpleHTTPRequestHandler, directory='.'
+                http.server.SimpleHTTPRequestHandler, directory=self.serve_path
             ),
         )
         self._httpd_thread = threading.Thread(target=self._httpd.serve_forever)
