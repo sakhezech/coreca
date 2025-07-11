@@ -61,6 +61,11 @@ class Core[T]:
             if proc.match(path):
                 self.send_signal((f'{proc.name}:{event_type}', path))
 
+    def send_events_for_existing_files(self) -> None:
+        for base, _, files in Path('.').walk():
+            for file in files:
+                self.receive_event(base / file, 'update')
+
     def start_observe(self) -> None:
         self._observer = watchdog.observers.Observer()
         self._observer.schedule(EventToCoreHandler(self), '.', recursive=True)
@@ -95,6 +100,7 @@ class Core[T]:
         self.stop_serve()
 
     def run(self) -> None:
+        self.send_events_for_existing_files()
         with self:
             try:
                 while True:
