@@ -1,0 +1,28 @@
+[project]
+name = 'core'
+description = 'SSG'
+readme = 'README.md'
+license = 'MIT'
+dependencies = ['watchdog']
+dynamic = ['version']
+
+[project.optional-dependencies]
+dev = ['ruff', 'faterunner']
+
+[tool.ruff]
+line-length = 79
+[tool.ruff.format]
+quote-style = 'single'
+[tool.ruff.lint]
+extend-select = ['I', 'E501']
+
+[tool.faterunner.targets]
+check = ['ruff check .', 'ruff format --check .']
+format = ['ruff check --fix .', 'ruff format .']
+
+[tool.hatch.version]
+path = 'src/core/__version__.py'
+
+[build-system]
+requires = ['hatchling']
+build-backend = 'hatchling.build'
