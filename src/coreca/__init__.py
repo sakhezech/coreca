@@ -1,8 +1,9 @@
+import contextlib
 import functools
 import http.server
 import threading
 import time
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Generator, Sequence
 from pathlib import Path
 from typing import Literal
 
@@ -93,18 +94,19 @@ class Core[T]:
             for signal in signals:
                 self.send_signal(signal)
 
-    def start_observe(self) -> None:
+    @contextlib.contextmanager
+    def observe(self) -> Generator[None]:
         self._observer = watchdog.observers.Observer()
         self._observer.schedule(
             EventToCoreHandler(self), str(self.base_path), recursive=True
         )
         self._observer.start()
-
-    def stop_observe(self) -> None:
+        yield
         self._observer.stop()
         self._observer.join()
 
-    def start_serve(self, host_port: tuple[str, int]) -> None:
+    @contextlib.contextmanager
+    def serve(self, host_port: tuple[str, int]) -> Generator[None]:
         self._httpd = http.server.ThreadingHTTPServer(
             host_port,
             functools.partial(
@@ -113,19 +115,21 @@ class Core[T]:
         )
         self._httpd_thread = threading.Thread(target=self._httpd.serve_forever)
         self._httpd_thread.start()
-
-    def stop_serve(self) -> None:
+        yield
         self._httpd.shutdown()
         self._httpd_thread.join()
 
     def run(self, host_port: tuple[str, int] | None = None) -> None:
         self.backfill_signals()
-        self.start_observe()
-        self.start_serve(host_port or ('localhost', 5000))
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            print('Exiting')
-        self.stop_observe()
-        self.stop_serve()
+        lifespans = [
+            self.observe(),
+            self.serve(host_port or ('localhost', 5000)),
+        ]
+        with contextlib.ExitStack() as stack:
+            for lifespan in lifespans:
+                stack.enter_context(lifespan)
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                print('Exiting')
