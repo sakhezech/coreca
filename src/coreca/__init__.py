@@ -79,10 +79,19 @@ class Core[T]:
             if proc.match(path, self.base_path):
                 self.send_signal(Signal(proc.name, event_type, path))
 
-    def send_events_for_existing_files(self) -> None:
+    def backfill_signals(self) -> None:
+        matched_signals: dict[Processor, list[Signal]] = {
+            proc: [] for proc in self.processors
+        }
         for base, _, files in self.base_path.walk():
             for file in files:
-                self.receive_event(base / file, 'update')
+                path = base / file
+                for proc, signals in matched_signals.items():
+                    if proc.match(path, self.base_path):
+                        signals.append(Signal(proc.name, 'update', path))
+        for signals in matched_signals.values():
+            for signal in signals:
+                self.send_signal(signal)
 
     def start_observe(self) -> None:
         self._observer = watchdog.observers.Observer()
@@ -110,7 +119,7 @@ class Core[T]:
         self._httpd_thread.join()
 
     def run(self, host_port: tuple[str, int] | None = None) -> None:
-        self.send_events_for_existing_files()
+        self.backfill_signals()
         self.start_observe()
         self.start_serve(host_port or ('localhost', 5000))
         try:
