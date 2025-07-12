@@ -120,7 +120,6 @@ class Core[T]:
         self._httpd_thread.join()
 
     def run(self, host_port: tuple[str, int] | None = None) -> None:
-        self.backfill_signals()
         lifespans = [
             self.observe(),
             self.serve(host_port or ('localhost', 5000)),
@@ -128,6 +127,7 @@ class Core[T]:
         with contextlib.ExitStack() as stack:
             for lifespan in lifespans:
                 stack.enter_context(lifespan)
+            self.backfill_signals()
             try:
                 while True:
                     time.sleep(1)
