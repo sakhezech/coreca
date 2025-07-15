@@ -30,15 +30,22 @@ class EventToCoreHandler(watchdog.events.FileSystemEventHandler):
             return
         src_path = Path(str(event.src_path))
         if event.event_type in ('created', 'modified'):
-            self.core.receive_event(src_path, 'update')
+            self.send_signals_to_core(src_path, 'update')
         elif event.event_type in ('deleted',):
-            self.core.receive_event(src_path, 'delete')
+            self.send_signals_to_core(src_path, 'delete')
         elif event.event_type in ('moved',):
             dest_path = Path(str(event.dest_path))
-            self.core.receive_event(src_path, 'delete')
-            self.core.receive_event(dest_path, 'update')
+            self.send_signals_to_core(src_path, 'delete')
+            self.send_signals_to_core(dest_path, 'update')
         else:
             pass
+
+    def send_signals_to_core(
+        self, path: Path, event_type: Literal['update', 'delete']
+    ) -> None:
+        for proc in self.core.processors:
+            if proc.match(path, self.core.base_path):
+                self.core.send_signal(Signal(proc.name, event_type, path))
 
 
 class Processor:
@@ -72,13 +79,6 @@ class Core[T]:
             stop = handler(self, signal)
             if stop:
                 return
-
-    def receive_event(
-        self, path: Path, event_type: Literal['update', 'delete']
-    ) -> None:
-        for proc in self.processors:
-            if proc.match(path, self.base_path):
-                self.send_signal(Signal(proc.name, event_type, path))
 
     def backfill_signals(self) -> None:
         matched_signals: dict[Processor, list[Signal]] = {
