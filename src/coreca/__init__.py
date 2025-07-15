@@ -1,14 +1,8 @@
 import contextlib
-import functools
-import http.server
-import threading
 import time
-from collections.abc import Callable, Collection, Generator, Sequence
+from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
 from typing import Any, Concatenate, ContextManager, Literal
-
-import watchdog.events
-import watchdog.observers
 
 
 class Signal:
@@ -19,33 +13,6 @@ class Signal:
         # NOTE: without specifying the type again self.type becomes str
         self.type: Literal['update', 'delete'] = type
         self.path = path
-
-
-class EventToCoreHandler(watchdog.events.FileSystemEventHandler):
-    def __init__(self, core: 'Core') -> None:
-        self.core = core
-
-    def on_any_event(self, event: watchdog.events.FileSystemEvent) -> None:
-        if event.is_directory:
-            return
-        src_path = Path(str(event.src_path))
-        if event.event_type in ('created', 'modified'):
-            self.send_signals_to_core(src_path, 'update')
-        elif event.event_type in ('deleted',):
-            self.send_signals_to_core(src_path, 'delete')
-        elif event.event_type in ('moved',):
-            dest_path = Path(str(event.dest_path))
-            self.send_signals_to_core(src_path, 'delete')
-            self.send_signals_to_core(dest_path, 'update')
-        else:
-            pass
-
-    def send_signals_to_core(
-        self, path: Path, event_type: Literal['update', 'delete']
-    ) -> None:
-        for proc in self.core.processors:
-            if proc.match(path, self.core.base_path):
-                self.core.send_signal(Signal(proc.name, event_type, path))
 
 
 class Processor:
@@ -119,32 +86,3 @@ class Lifespan[T, **P]:
 
     def __call__(self, core: Core[T]) -> ContextManager:
         return self.lifespan(core, *self.args, **self.kwargs)
-
-
-@contextlib.contextmanager
-def observe(core: Core) -> Generator[None]:
-    observer = watchdog.observers.Observer()
-    observer.schedule(
-        EventToCoreHandler(core), str(core.base_path), recursive=True
-    )
-    observer.start()
-    yield
-    observer.stop()
-    observer.join()
-
-
-@contextlib.contextmanager
-def serve(
-    _: Core, serve_path: Path, host_port: tuple[str, int]
-) -> Generator[None]:
-    httpd = http.server.ThreadingHTTPServer(
-        host_port,
-        functools.partial(
-            http.server.SimpleHTTPRequestHandler, directory=serve_path
-        ),
-    )
-    httpd_thread = threading.Thread(target=httpd.serve_forever)
-    httpd_thread.start()
-    yield
-    httpd.shutdown()
-    httpd_thread.join()
