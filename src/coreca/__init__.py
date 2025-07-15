@@ -5,7 +5,7 @@ import threading
 import time
 from collections.abc import Callable, Collection, Generator, Sequence
 from pathlib import Path
-from typing import Literal
+from typing import Any, Concatenate, ContextManager, Literal
 
 import watchdog.events
 import watchdog.observers
@@ -57,15 +57,15 @@ class Core[T]:
         self,
         processors: Sequence[Processor],
         signal_handlers: Sequence[Callable[['Core[T]', Signal], bool | None]],
+        lifespans: Sequence['Lifespan[T, Any]'],
         state: T,
         base_path: Path | None = None,
-        serve_path: Path | None = None,
     ) -> None:
         self.processors = processors
         self.signal_handlers = signal_handlers
+        self.lifespans = lifespans
         self.state = state
         self.base_path = base_path or Path('.')
-        self.serve_path = serve_path or Path('.')
 
     def send_signal(self, signal: Signal) -> None:
         for handler in self.signal_handlers:
@@ -94,42 +94,57 @@ class Core[T]:
             for signal in signals:
                 self.send_signal(signal)
 
-    @contextlib.contextmanager
-    def observe(self) -> Generator[None]:
-        self._observer = watchdog.observers.Observer()
-        self._observer.schedule(
-            EventToCoreHandler(self), str(self.base_path), recursive=True
-        )
-        self._observer.start()
-        yield
-        self._observer.stop()
-        self._observer.join()
-
-    @contextlib.contextmanager
-    def serve(self, host_port: tuple[str, int]) -> Generator[None]:
-        self._httpd = http.server.ThreadingHTTPServer(
-            host_port,
-            functools.partial(
-                http.server.SimpleHTTPRequestHandler, directory=self.serve_path
-            ),
-        )
-        self._httpd_thread = threading.Thread(target=self._httpd.serve_forever)
-        self._httpd_thread.start()
-        yield
-        self._httpd.shutdown()
-        self._httpd_thread.join()
-
-    def run(self, host_port: tuple[str, int] | None = None) -> None:
-        lifespans = [
-            self.observe(),
-            self.serve(host_port or ('localhost', 5000)),
-        ]
+    def run(self) -> None:
         with contextlib.ExitStack() as stack:
-            for lifespan in lifespans:
-                stack.enter_context(lifespan)
+            for lifespan in self.lifespans:
+                stack.enter_context(lifespan(self))
             self.backfill_signals()
             try:
                 while True:
                     time.sleep(1)
             except KeyboardInterrupt:
                 print('Exiting')
+
+
+class Lifespan[T, **P]:
+    def __init__(
+        self,
+        lifespan: Callable[Concatenate[Core[T], P], ContextManager],
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> None:
+        self.lifespan = lifespan
+        self.args = args
+        self.kwargs = kwargs
+
+    def __call__(self, core: Core[T]) -> ContextManager:
+        return self.lifespan(core, *self.args, **self.kwargs)
+
+
+@contextlib.contextmanager
+def observe(core: Core) -> Generator[None]:
+    observer = watchdog.observers.Observer()
+    observer.schedule(
+        EventToCoreHandler(core), str(core.base_path), recursive=True
+    )
+    observer.start()
+    yield
+    observer.stop()
+    observer.join()
+
+
+@contextlib.contextmanager
+def serve(
+    _: Core, serve_path: Path, host_port: tuple[str, int]
+) -> Generator[None]:
+    httpd = http.server.ThreadingHTTPServer(
+        host_port,
+        functools.partial(
+            http.server.SimpleHTTPRequestHandler, directory=serve_path
+        ),
+    )
+    httpd_thread = threading.Thread(target=httpd.serve_forever)
+    httpd_thread.start()
+    yield
+    httpd.shutdown()
+    httpd_thread.join()
