@@ -13,11 +13,11 @@ import watchdog.observers
 
 class Signal:
     def __init__(
-        self, source: str, type_: Literal['update', 'delete'], path: Path
+        self, source: str, type: Literal['update', 'delete'], path: Path
     ) -> None:
         self.source = source
         # NOTE: without specifying the type again self.type becomes str
-        self.type: Literal['update', 'delete'] = type_
+        self.type: Literal['update', 'delete'] = type
         self.path = path
 
 
