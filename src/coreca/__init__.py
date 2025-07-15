@@ -20,7 +20,7 @@ class Processor:
         self.name = name
         self.patterns = patterns
 
-    def match(self, path: Path, base: Path = Path('.')) -> bool:
+    def match(self, path: Path, base: Path) -> bool:
         return any(
             path.full_match(base / pattern) for pattern in self.patterns
         )
