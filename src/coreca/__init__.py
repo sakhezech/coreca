@@ -26,6 +26,21 @@ class Processor:
         )
 
 
+class Lifespan[T, **P]:
+    def __init__(
+        self,
+        lifespan: Callable[Concatenate['Core[T]', P], ContextManager],
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> None:
+        self.lifespan = lifespan
+        self.args = args
+        self.kwargs = kwargs
+
+    def __call__(self, core: 'Core[T]') -> ContextManager:
+        return self.lifespan(core, *self.args, **self.kwargs)
+
+
 class Core[T]:
     def __init__(
         self,
@@ -71,18 +86,3 @@ class Core[T]:
                     time.sleep(1)
             except KeyboardInterrupt:
                 print('Exiting')
-
-
-class Lifespan[T, **P]:
-    def __init__(
-        self,
-        lifespan: Callable[Concatenate[Core[T], P], ContextManager],
-        *args: P.args,
-        **kwargs: P.kwargs,
-    ) -> None:
-        self.lifespan = lifespan
-        self.args = args
-        self.kwargs = kwargs
-
-    def __call__(self, core: Core[T]) -> ContextManager:
-        return self.lifespan(core, *self.args, **self.kwargs)
