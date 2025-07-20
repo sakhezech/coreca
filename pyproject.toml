@@ -3,7 +3,7 @@ name = 'coreca'
 description = 'BYO Everything Static Site Generator'
 readme = 'README.md'
 license = 'MIT'
-dependencies = ['watchdog']
+dependencies = ['watchdog', 'websockets']
 dynamic = ['version']
 
 [project.optional-dependencies]
