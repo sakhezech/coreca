@@ -76,13 +76,16 @@ class Core[T]:
             for signal in signals:
                 self.send_signal(signal)
 
-    def run(self) -> None:
+    # HACK: instead of manually passing in `wait` we should determine it
+    # by the types of lifespans
+    # i.e. serve and observe should wait and a db connection should not
+    def run(self, wait: bool = False) -> None:
         with contextlib.ExitStack() as stack:
             for lifespan in self.lifespans:
                 stack.enter_context(lifespan(self))
             self.backfill_signals()
             try:
-                while True:
+                while wait:
                     time.sleep(1)
             except KeyboardInterrupt:
-                print('Exiting')
+                print('Stopped waiting.')
